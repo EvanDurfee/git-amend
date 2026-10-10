@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+# set -x
+
+PROGRAM="$(basename "$0")"
+
+
+usage() {
+	cat <<EOF
+Usage: $PROGRAM [OPTIONS] COMMIT_REF
+
+Amend any commit in history with the staged changes, using a fixup commit
+and an autosquash rebase. With no staged changes, the commit is only reworded.
+
+Options:
+  -h, --help        Show this help message and exit
+  -a, --all         Pass --all to git commit, staging all modified and
+                    deleted files first
+  -p, --patch       Pass --patch to git commit, choosing hunks interactively
+  -o, --only FILE   Pass --only FILE to git commit, committing only FILE;
+                    may be given more than once
+  -e, --edit        Open the commit message in the editor for rewording
+                    (default)
+      --no-edit     Keep the commit message as is
+EOF
+}
+
+
+die() {
+	echo "$PROGRAM: $*" >&2
+	exit 1
+}
+
+
+main() {
+	# Require util-linux (enhanced) getopt, which exits 4 when probed with -T
+	getopt -T >/dev/null && die "GNU enhanced getopt is required"
+
+	local parsed
+	parsed="$(getopt --name "$PROGRAM" --options 'hapo:e' --longoptions 'help,all,patch,only:,edit,no-edit' -- "$@")" \
+		|| { usage >&2; exit 2; }
+	eval set -- "$parsed"
+
+	local edit=true
+	local commit_args=()
+	local only_files=()
+
+	while true; do
+		case "$1" in
+			-h | --help)
+				usage
+				exit 0
+				;;
+			-a | --all)
+				commit_args+=(--all)
+				;;
+			-p | --patch)
+				commit_args+=(--patch)
+				;;
+			-o | --only)
+				shift
+				only_files+=("$1")
+				;;
+			-e | --edit)
+				edit=true
+				;;
+			--no-edit)
+				edit=false
+				;;
+			--)
+				shift
+				break
+				;;
+			*)
+				die "unhandled option: $1"
+				;;
+		esac
+		shift
+	done
+
+	if [[ $# -eq 0 ]]; then
+		die "expected a COMMIT_REF; try --help"
+	fi
+	if [[ $# -gt 1 ]]; then
+		die "unexpected argument: $2"
+	fi
+
+	if [[ ${#only_files[@]} -gt 0 ]]; then
+		commit_args+=(--only -- "${only_files[@]}")
+	fi
+
+	amend "$1" "$edit" "${commit_args[@]}"
+}
+
+
+# amend ref edit [commit_arg...]
+amend() {
+	if [[ $# -lt 2 ]]; then
+		die "amend: expected <ref> <edit> [commit_arg...]"
+	fi
+
+	local ref="$1"
+	local edit="$2"
+	shift 2
+
+	git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
+
+	# Resolve up front, since relative refs like HEAD~2 shift once the fixup commit lands
+	local commit
+	commit="$(git rev-parse --verify --quiet "$ref^{commit}")" || die "not a commit: $ref"
+	git merge-base --is-ancestor "$commit" HEAD || die "$ref is not an ancestor of HEAD"
+
+	# Rebase onto the parent, or from the root when amending the first commit
+	local rebase_args=()
+	local range
+	if git rev-parse --verify --quiet "$commit^" >/dev/null; then
+		rebase_args+=("$commit^")
+		range="$commit^..HEAD"
+	else
+		rebase_args+=(--root)
+		range="HEAD"
+	fi
+
+	# Rebasing would flatten merges, so refuse rather than silently rewrite their shape
+	if [ -n "$(git rev-list --merges "$range")" ]; then
+		die "cannot amend $ref: merge commits between it and HEAD"
+	fi
+
+	if [ "$edit" = true ]; then
+		# amend! commits carry the new message; allow empty ones for a plain reword
+		git commit --fixup="amend:$commit" --allow-empty "$@"
+	else
+		git commit --fixup="$commit" "$@"
+	fi
+
+	# The todo list is already right, so skip its editor; autostash covers unstaged leftovers
+	GIT_SEQUENCE_EDITOR=: git rebase --interactive --autosquash --autostash "${rebase_args[@]}"
+}
+
+
+main "$@"
