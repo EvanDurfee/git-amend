@@ -23,6 +23,15 @@ Options:
   -e, --edit        Open the commit message in the editor for rewording
                     (default)
       --no-edit     Keep the commit message as is
+      --rebase-merges[=MODE]
+                    Pass --rebase-merges to git rebase, recreating merge commits
+                    instead of refusing to amend across them; MODE is
+                    rebase-cousins or no-rebase-cousins
+      --update-refs Pass --update-refs to git rebase, moving branches that
+                    point to the rewritten commits along with them
+      --no-update-refs
+                    Pass --no-update-refs to git rebase, overriding
+                    rebase.updateRefs
 EOF
 }
 
@@ -38,11 +47,15 @@ main() {
 	getopt -T >/dev/null && die "GNU enhanced getopt is required"
 
 	local parsed
-	parsed="$(getopt --name "$PROGRAM" --options 'hapo:e' --longoptions 'help,all,patch,only:,edit,no-edit' -- "$@")" \
+	parsed="$(getopt --name "$PROGRAM" --options 'hapo:e' --longoptions 'help,all,patch,only:,edit,no-edit,rebase-merges::,update-refs,no-update-refs' -- "$@")" \
 		|| { usage >&2; exit 2; }
 	eval set -- "$parsed"
 
 	local edit=true
+	local rebase_merges=false
+	local rebase_merges_mode=""
+	# Empty leaves it to rebase.updateRefs
+	local update_refs=""
 	local commit_args=()
 	local only_files=()
 
@@ -68,6 +81,18 @@ main() {
 			--no-edit)
 				edit=false
 				;;
+			--rebase-merges)
+				# Optional argument: getopt always follows with a word, empty when omitted
+				shift
+				rebase_merges=true
+				rebase_merges_mode="$1"
+				;;
+			--update-refs)
+				update_refs=true
+				;;
+			--no-update-refs)
+				update_refs=false
+				;;
 			--)
 				shift
 				break
@@ -86,23 +111,37 @@ main() {
 		die "unexpected argument: $2"
 	fi
 
+	# Check MODE here, since git rebase would only reject it after the fixup commit lands
+	if [ "$rebase_merges" = true ]; then
+		case "$rebase_merges_mode" in
+			"" | rebase-cousins | no-rebase-cousins) ;;
+			*)
+				die "unknown --rebase-merges mode: $rebase_merges_mode"
+				;;
+		esac
+	fi
+
 	if [[ ${#only_files[@]} -gt 0 ]]; then
 		commit_args+=(--only -- "${only_files[@]}")
 	fi
 
-	amend "$1" "$edit" "${commit_args[@]}"
+	amend "$1" "$edit" "$rebase_merges" "$rebase_merges_mode" "$update_refs" "${commit_args[@]}"
 }
 
 
-# amend ref edit [commit_arg...]
+# amend ref edit rebase_merges rebase_merges_mode update_refs [commit_arg...]
+# An empty update_refs passes neither --update-refs nor --no-update-refs
 amend() {
-	if [[ $# -lt 2 ]]; then
-		die "amend: expected <ref> <edit> [commit_arg...]"
+	if [[ $# -lt 5 ]]; then
+		die "amend: expected <ref> <edit> <rebase_merges> <rebase_merges_mode> <update_refs> [commit_arg...]"
 	fi
 
 	local ref="$1"
 	local edit="$2"
-	shift 2
+	local rebase_merges="$3"
+	local rebase_merges_mode="$4"
+	local update_refs="$5"
+	shift 5
 
 	git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
 
@@ -111,8 +150,20 @@ amend() {
 	commit="$(git rev-parse --verify --quiet "$ref^{commit}")" || die "not a commit: $ref"
 	git merge-base --is-ancestor "$commit" HEAD || die "$ref is not an ancestor of HEAD"
 
-	# Rebase onto the parent, or from the root when amending the first commit
 	local rebase_args=()
+	if [ "$rebase_merges" = true ]; then
+		rebase_args+=("--rebase-merges${rebase_merges_mode:+=$rebase_merges_mode}")
+	fi
+	case "$update_refs" in
+		true)
+			rebase_args+=(--update-refs)
+			;;
+		false)
+			rebase_args+=(--no-update-refs)
+			;;
+	esac
+
+	# Rebase onto the parent, or from the root when amending the first commit
 	local range
 	if git rev-parse --verify --quiet "$commit^" >/dev/null; then
 		rebase_args+=("$commit^")
@@ -122,9 +173,9 @@ amend() {
 		range="HEAD"
 	fi
 
-	# Rebasing would flatten merges, so refuse rather than silently rewrite their shape
-	if [ -n "$(git rev-list --merges "$range")" ]; then
-		die "cannot amend $ref: merge commits between it and HEAD"
+	# A plain rebase would flatten merges, so refuse rather than silently rewrite their shape
+	if [ "$rebase_merges" = false ] && [ -n "$(git rev-list --merges "$range")" ]; then
+		die "cannot amend $ref: merge commits between it and HEAD; see --rebase-merges"
 	fi
 
 	if [ "$edit" = true ]; then

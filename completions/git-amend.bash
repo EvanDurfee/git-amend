@@ -20,8 +20,12 @@ _git_amend() {
 			__git_complete_index_file "--committable"
 			return
 			;;
+		--rebase-merges=*)
+			__gitcomp "rebase-cousins no-rebase-cousins" "" "${cur#--rebase-merges=}"
+			return
+			;;
 		-*)
-			__gitcomp "--all --patch --only= --edit --no-edit --help"
+			__gitcomp "--all --patch --only= --edit --no-edit --rebase-merges --rebase-merges= --update-refs --no-update-refs --help"
 			return
 			;;
 	esac

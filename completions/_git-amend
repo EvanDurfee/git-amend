@@ -42,6 +42,9 @@ _git-amend() {
 		'*'{-o+,--only=}'[commit only the given file]:file:_files' \
 		'(-e --edit --no-edit)'{-e,--edit}'[open the commit message in the editor for rewording]' \
 		'(-e --edit)--no-edit[keep the commit message as is]' \
+		'--rebase-merges=-[recreate merge commits instead of refusing to amend across them]::mode:(rebase-cousins no-rebase-cousins)' \
+		'(--no-update-refs)--update-refs[move branches that point to the rewritten commits]' \
+		'(--update-refs)--no-update-refs[do not move branches, overriding rebase.updateRefs]' \
 		'1:commit to amend:__git_amend_commits'
 }
 

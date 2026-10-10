@@ -26,7 +26,8 @@ git-amend \- Amend any commit in history with the staged changes
 .SH "SYNOPSIS"
 .sp
 .nf
-\fBgit\fR \fBamend\fR [\fB\-a\fR | \fB\-p\fR | \fB\-o\fR \fI<file>\fR\&...\:] [\fB\-e\fR | \fB\-\-no\-edit\fR] \fI<commit>\fR
+\fBgit\fR \fBamend\fR [\fB\-a\fR | \fB\-p\fR | \fB\-o\fR \fI<file>\fR\&...\:] [\fB\-e\fR | \fB\-\-no\-edit\fR]
+          [\fB\-\-rebase\-merges\fR[=\fI<mode>\fR]] [\fB\-\-[no\-]update\-refs\fR] \fI<commit>\fR
 .fi
 .SH "DESCRIPTION"
 .sp
@@ -86,6 +87,48 @@ as it is\&. There must be changes to amend, otherwise
 \fBgit\fR \fBcommit\fR
 fails with "nothing to commit" and history is left alone\&.
 .RE
+.PP
+\fB\-\-rebase\-merges\fR[=\fI<mode>\fR]
+.RS 4
+Pass
+\fB\-\-rebase\-merges\fR
+to
+\fBgit-rebase\fR(1), recreating merge commits between
+\fI<commit>\fR
+and
+\fBHEAD\fR
+instead of refusing to amend across them\&. This also allows
+\fI<commit>\fR
+to be a merge commit, or a commit on a merged branch\&.
+\fI<mode>\fR
+is
+\fBno\-rebase\-cousins\fR
+(the default), which keeps merged branches at their original branch point, or
+\fBrebase\-cousins\fR, which moves branches that do not start from
+\fI<commit>\fR\(cqs parent onto it\&. It is checked before anything is committed\&.
+.sp
+Each merge is recreated by merging again with its original message, so conflicts resolved in the original merge come up again unless
+\fBgit-rerere\fR(1)
+remembers them, and changes made in the merge commit beyond its conflict resolution are lost\&.
+.RE
+.PP
+\fB\-\-update\-refs\fR, \fB\-\-no\-update\-refs\fR
+.RS 4
+Pass
+\fB\-\-update\-refs\fR
+or
+\fB\-\-no\-update\-refs\fR
+to
+\fBgit-rebase\fR(1)\&. With
+\fB\-\-update\-refs\fR, other branches that point to commits being rewritten, such as a merged branch when used with
+\fB\-\-rebase\-merges\fR, are moved to the new commits; branches checked out in another worktree are not\&. With neither option, the
+\fBrebase\&.updateRefs\fR
+setting in
+\fBgit-config\fR(1)
+decides, and
+\fB\-\-no\-update\-refs\fR
+overrides it\&. If both are given, the last one wins\&.
+.RE
 .sp
 \fB\-a\fR, \fB\-p\fR and \fB\-o\fR are passed through as given, so combinations that \fBgit-commit\fR(1) rejects, such as \fB\-a\fR with \fB\-o\fR, are rejected here too\&.
 .SH "EDITING THE MESSAGE"
@@ -144,6 +187,18 @@ $ git amend \-p \-\-no\-edit feature~3
 .RE
 .\}
 .sp
+Reword a commit that has a merge after it, keeping the merge:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git amend \-\-rebase\-merges HEAD~4
+.fi
+.if n \{\
+.RE
+.\}
+.sp
 If a later commit conflicts with the amended one, the rebase stops\&. Resolve the conflict and continue, or abort to return to the branch as it was, with the fixup commit on top:
 .sp
 .if n \{\
@@ -161,11 +216,11 @@ $ git rebase \-\-continue
 .\}
 .SH "BUGS"
 .sp
-\fI<commit>\fR must be an ancestor of \fBHEAD\fR, and there must be no merge commits from \fI<commit>\fR to \fBHEAD\fR, since the rebase would flatten them\&. Both are checked before anything is committed\&.
+\fI<commit>\fR must be an ancestor of \fBHEAD\fR, and without \fB\-\-rebase\-merges\fR there must be no merge commits from \fI<commit>\fR to \fBHEAD\fR, since the rebase would flatten them\&. Both are checked before anything is committed\&.
 .sp
-Like any rebase, this rewrites \fI<commit>\fR and all commits after it; branches that were already pushed need a force push, and other branches containing those commits are not updated\&.
+Like any rebase, this rewrites \fI<commit>\fR and all commits after it; branches that were already pushed need a force push, other branches that point to those commits are moved only with \fB\-\-update\-refs\fR or \fBrebase\&.updateRefs\fR, and branches with commits of their own on top of them are never updated\&. With \fB\-\-rebase\-merges\fR this includes the merged branches: amending a commit on one otherwise leaves its branch pointing at the old commits\&.
 .sp
 If the rebase fails to start, for example because another rebase is in progress, the fixup commit is left on top of \fBHEAD\fR; squash it later with \fBgit\fR \fBrebase\fR \fB\-i\fR \fB\-\-autosquash\fR, or drop it with \fBgit\fR \fBreset\fR \fBHEAD~1\fR\&.
 .SH "SEE ALSO"
 .sp
-\fBgit-commit\fR(1), \fBgit-rebase\fR(1)
+\fBgit-commit\fR(1), \fBgit-rebase\fR(1), \fBgit-rerere\fR(1)
