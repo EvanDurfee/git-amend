@@ -1,0 +1,48 @@
+#compdef git-amend
+#description amend any commit in history with the staged changes
+
+# Completes both `git-amend ...` and `git amend ...`: _git dispatches to _git-amend
+# with the words shifted so words[1] is the command name either way.
+
+# Recent commits as HEAD~N with their subjects; first parents only, so N matches HEAD~N
+(( $+functions[__git_amend_recent_commits] )) ||
+__git_amend_recent_commits() {
+	local -a commits subjects
+	local subject
+	local -i i=0
+	subjects=(${(f)"$(_call_program commits git log --first-parent -n 20 --format=%s HEAD 2>/dev/null)"})
+	for subject in $subjects; do
+		commits+=("HEAD~$i:$subject")
+		(( i++ ))
+	done
+	(( $#commits )) || return 1
+	commits[1]="HEAD:${commits[1]#*:}"
+	_describe -V -t recent-commits 'recent commit' commits
+}
+
+(( $+functions[__git_amend_refs] )) ||
+__git_amend_refs() {
+	local -a refs
+	refs=(${(f)"$(_call_program refs "git for-each-ref --format='%(refname:short)' refs/heads refs/tags" 2>/dev/null)"})
+	_wanted refs expl 'branch or tag' compadd -a refs
+}
+
+(( $+functions[__git_amend_commits] )) ||
+__git_amend_commits() {
+	_alternative \
+		'recent-commits:recent commit:__git_amend_recent_commits' \
+		'refs:branch or tag:__git_amend_refs'
+}
+
+_git-amend() {
+	_arguments -S -s \
+		'(- *)'{-h,--help}'[show help message and exit]' \
+		'(-a --all)'{-a,--all}'[stage all modified and deleted files first]' \
+		'(-p --patch)'{-p,--patch}'[choose hunks to commit interactively]' \
+		'*'{-o+,--only=}'[commit only the given file]:file:_files' \
+		'(-e --edit --no-edit)'{-e,--edit}'[open the commit message in the editor for rewording]' \
+		'(-e --edit)--no-edit[keep the commit message as is]' \
+		'1:commit to amend:__git_amend_commits'
+}
+
+_git-amend "$@"
