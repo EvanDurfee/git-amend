@@ -1,0 +1,171 @@
+'\" t
+.\"     Title: git-amend
+.\"      Date: 10/10/2026
+.\"    Manual: Git Manual
+.\"    Source: git-amend
+.\"  Language: English
+.\"
+.TH "GIT\-AMEND" "1" "10/10/2026" "git\-amend" "Git Manual"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+git-amend \- Amend any commit in history with the staged changes
+.SH "SYNOPSIS"
+.sp
+.nf
+\fBgit\fR \fBamend\fR [\fB\-a\fR | \fB\-p\fR | \fB\-o\fR \fI<file>\fR\&...\:] [\fB\-e\fR | \fB\-\-no\-edit\fR] \fI<commit>\fR
+.fi
+.SH "DESCRIPTION"
+.sp
+Fold the staged changes into \fI<commit>\fR, which may be any commit reachable from \fBHEAD\fR, and reopen its message in the editor for rewording\&. This is \fBgit\fR \fBcommit\fR \fB\-\-amend\fR for commits other than the last one\&.
+.sp
+\fI<commit>\fR is resolved before anything is committed, so relative names such as \fBHEAD~2\fR refer to the commit they named when the command was started\&. A fixup commit for it is then created with \fBgit-commit\fR(1) and squashed into it with \fBgit\fR \fBrebase\fR \fB\-\-interactive\fR \fB\-\-autosquash\fR, without opening the todo list\&. The rebase starts at the parent of \fI<commit>\fR, or at the root when \fI<commit>\fR is the first commit, and rewrites \fI<commit>\fR and every commit after it\&.
+.sp
+By default the fixup commit is an \fBamend!\fR commit created with \fB\-\-fixup=amend:\fR\fI<commit>\fR, whose message replaces that of \fI<commit>\fR (see "EDITING THE MESSAGE" below)\&. With no staged changes it is empty, and \fI<commit>\fR is only reworded\&. With \fB\-\-no\-edit\fR it is a plain \fBfixup!\fR commit, and the message of \fI<commit>\fR is kept\&.
+.sp
+The rebase is run with \fB\-\-autostash\fR, so changes left unstaged, for example by \fB\-p\fR or \fB\-o\fR, are stashed during the rebase and restored afterwards\&.
+.SH "OPTIONS"
+.PP
+\fB\-h\fR, \fB\-\-help\fR
+.RS 4
+Show a usage summary and exit\&.
+.RE
+.PP
+\fB\-a\fR, \fB\-\-all\fR
+.RS 4
+Pass
+\fB\-\-all\fR
+to
+\fBgit-commit\fR(1), staging all modified and deleted tracked files first\&.
+.RE
+.PP
+\fB\-p\fR, \fB\-\-patch\fR
+.RS 4
+Pass
+\fB\-\-patch\fR
+to
+\fBgit-commit\fR(1), choosing the hunks to include interactively\&.
+.RE
+.PP
+\fB\-o\fR \fI<file>\fR, \fB\-\-only\fR=\fI<file>\fR
+.RS 4
+Pass
+\fB\-\-only\fR
+\fI<file>\fR
+to
+\fBgit-commit\fR(1), including only the current contents of
+\fI<file>\fR
+and ignoring anything else that is staged\&. May be given more than once\&.
+.RE
+.PP
+\fB\-e\fR, \fB\-\-edit\fR
+.RS 4
+Open the message of
+\fI<commit>\fR
+in the editor for rewording\&. This is the default\&.
+.RE
+.PP
+\fB\-\-no\-edit\fR
+.RS 4
+Keep the message of
+\fI<commit>\fR
+as it is\&. There must be changes to amend, otherwise
+\fBgit\fR \fBcommit\fR
+fails with "nothing to commit" and history is left alone\&.
+.RE
+.sp
+\fB\-a\fR, \fB\-p\fR and \fB\-o\fR are passed through as given, so combinations that \fBgit-commit\fR(1) rejects, such as \fB\-a\fR with \fB\-o\fR, are rejected here too\&.
+.SH "EDITING THE MESSAGE"
+.sp
+Without \fB\-\-no\-edit\fR, the editor opens on the message of the \fBamend!\fR commit:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+amend! Add parser
+
+Add parser
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Leave the first line alone and edit the message below it; that message becomes the new message of \fI<commit>\fR\&. The first line is how \fB\-\-autosquash\fR finds \fI<commit>\fR: if it is changed, the fixup commit is left in history as a separate commit instead of being squashed\&. As with \fBgit-commit\fR(1), saving an empty message aborts, and nothing is changed\&.
+.SH "EXAMPLES"
+.sp
+Fix a typo in the commit before last, and reword it:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git add src/parser\&.c
+$ git amend HEAD~1
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Only reword a commit:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git amend 3f2a9c1
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Add some of the current changes to a commit on the branch, keeping its message:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git amend \-p \-\-no\-edit feature~3
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+If a later commit conflicts with the amended one, the rebase stops\&. Resolve the conflict and continue, or abort to return to the branch as it was, with the fixup commit on top:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git amend HEAD~3
+CONFLICT (content): Merge conflict in src/parser\&.c
+$ $EDITOR src/parser\&.c
+$ git add src/parser\&.c
+$ git rebase \-\-continue
+.fi
+.if n \{\
+.RE
+.\}
+.SH "BUGS"
+.sp
+\fI<commit>\fR must be an ancestor of \fBHEAD\fR, and there must be no merge commits from \fI<commit>\fR to \fBHEAD\fR, since the rebase would flatten them\&. Both are checked before anything is committed\&.
+.sp
+Like any rebase, this rewrites \fI<commit>\fR and all commits after it; branches that were already pushed need a force push, and other branches containing those commits are not updated\&.
+.sp
+If the rebase fails to start, for example because another rebase is in progress, the fixup commit is left on top of \fBHEAD\fR; squash it later with \fBgit\fR \fBrebase\fR \fB\-i\fR \fB\-\-autosquash\fR, or drop it with \fBgit\fR \fBreset\fR \fBHEAD~1\fR\&.
+.SH "SEE ALSO"
+.sp
+\fBgit-commit\fR(1), \fBgit-rebase\fR(1)
