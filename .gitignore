@@ -1,2 +1,3 @@
 # Built from man/git-amend.adoc by asciidoctor
 /man/*.1
+/.idea
