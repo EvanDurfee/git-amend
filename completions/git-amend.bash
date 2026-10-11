@@ -5,6 +5,8 @@
 # it the first time `git amend` is completed, and bash-completion loads it for
 # `git-amend` by name. Sourcing it from .bashrc also works.
 
+# cur, prev, words, cword and __git_cmd_idx are set by git's completion before calling this
+# shellcheck disable=SC2154
 _git_amend() {
 	case "$prev" in
 		-o | --only)

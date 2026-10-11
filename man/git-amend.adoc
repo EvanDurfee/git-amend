@@ -1,0 +1,134 @@
+= git-amend(1)
+:doctype: manpage
+:manmanual: Git Manual
+:mansource: git-amend
+
+== NAME
+
+git-amend - Amend any commit in history with the staged changes
+
+== SYNOPSIS
+
+[verse]
+*git* *amend* [*-a* | *-p* | *-o* _<file>_...] [*-e* | *--no-edit*]
+          [*--rebase-merges*[=_<mode>_]] [*--[no-]update-refs*] _<commit>_
+
+== DESCRIPTION
+
+Fold the staged changes into _<commit>_, which may be any commit reachable from *HEAD*, and reopen its message in the editor for rewording.
+This is *git* *commit* *--amend* for commits other than the last one.
+
+_<commit>_ is resolved before anything is committed, so relative names such as *HEAD{tilde}2* refer to the commit they named when the command was started.
+A fixup commit for it is then created with *git-commit*(1) and squashed into it with *git* *rebase* *--interactive* *--autosquash*, without opening the todo list.
+The rebase starts at the parent of _<commit>_, or at the root when _<commit>_ is the first commit, and rewrites _<commit>_ and every commit after it.
+
+By default the fixup commit is an *amend!* commit created with **--fixup=amend:**__<commit>__, whose message replaces that of _<commit>_ (see "EDITING THE MESSAGE" below).
+With no staged changes it is empty, and _<commit>_ is only reworded.
+With *--no-edit* it is a plain *fixup!* commit, and the message of _<commit>_ is kept.
+
+The rebase is run with *--autostash*, so changes left unstaged, for example by *-p* or *-o*, are stashed during the rebase and restored afterwards.
+
+== OPTIONS
+
+*-h*, *--help*::
+	Show a usage summary and exit.
+
+*-a*, *--all*::
+	Pass *--all* to *git-commit*(1), staging all modified and deleted tracked files first.
+
+*-p*, *--patch*::
+	Pass *--patch* to *git-commit*(1), choosing the hunks to include interactively.
+
+*-o* _<file>_, *--only*=_<file>_::
+	Pass *--only* _<file>_ to *git-commit*(1), including only the current contents of _<file>_ and ignoring anything else that is staged.
+	May be given more than once.
+
+*-e*, *--edit*::
+	Open the message of _<commit>_ in the editor for rewording.
+	This is the default.
+
+*--no-edit*::
+	Keep the message of _<commit>_ as it is.
+	There must be changes to amend, otherwise *git* *commit* fails with "nothing to commit" and history is left alone.
+
+*--rebase-merges*[=_<mode>_]::
+	Pass *--rebase-merges* to *git-rebase*(1), recreating merge commits between _<commit>_ and *HEAD* instead of refusing to amend across them.
+	This also allows _<commit>_ to be a merge commit, or a commit on a merged branch.
+	_<mode>_ is *no-rebase-cousins* (the default), which keeps merged branches at their original branch point, or *rebase-cousins*, which moves branches that do not start from the parent of _<commit>_ onto it.
+	It is checked before anything is committed.
++
+Each merge is recreated by merging again with its original message, so conflicts resolved in the original merge come up again unless *git-rerere*(1) remembers them, and changes made in the merge commit beyond its conflict resolution are lost.
+
+*--update-refs*, *--no-update-refs*::
+	Pass *--update-refs* or *--no-update-refs* to *git-rebase*(1).
+	With *--update-refs*, other branches that point to commits being rewritten, such as a merged branch when used with *--rebase-merges*, are moved to the new commits; branches checked out in another worktree are not.
+	With neither option, the *rebase.updateRefs* setting in *git-config*(1) decides, and *--no-update-refs* overrides it.
+	If both are given, the last one wins.
+
+*-a*, *-p* and *-o* are passed through as given, so combinations that *git-commit*(1) rejects, such as *-a* with *-o*, are rejected here too.
+
+== EDITING THE MESSAGE
+
+Without *--no-edit*, the editor opens on the message of the *amend!* commit:
+
+----
+amend! Add parser
+
+Add parser
+----
+
+Leave the first line alone and edit the message below it; that message becomes the new message of _<commit>_.
+The first line is how *--autosquash* finds _<commit>_: if it is changed, the fixup commit is left in history as a separate commit instead of being squashed.
+As with *git-commit*(1), saving an empty message aborts, and nothing is changed.
+
+== EXAMPLES
+
+Fix a typo in the commit before last, and reword it:
+
+----
+$ git add src/parser.c
+$ git amend HEAD~1
+----
+
+Only reword a commit:
+
+----
+$ git amend 3f2a9c1
+----
+
+Add some of the current changes to a commit on the branch, keeping its message:
+
+----
+$ git amend -p --no-edit feature~3
+----
+
+Reword a commit that has a merge after it, keeping the merge:
+
+----
+$ git amend --rebase-merges HEAD~4
+----
+
+If a later commit conflicts with the amended one, the rebase stops.
+Resolve the conflict and continue, or abort to return to the branch as it was, with the fixup commit on top:
+
+----
+$ git amend HEAD~3
+CONFLICT (content): Merge conflict in src/parser.c
+$ $EDITOR src/parser.c
+$ git add src/parser.c
+$ git rebase --continue
+----
+
+== BUGS
+
+_<commit>_ must be an ancestor of *HEAD*, and without *--rebase-merges* there must be no merge commits from _<commit>_ to *HEAD*, since the rebase would flatten them.
+Both are checked before anything is committed.
+
+Like any rebase, this rewrites _<commit>_ and all commits after it; branches that were already pushed need a force push, other branches that point to those commits are moved only with *--update-refs* or *rebase.updateRefs*, and branches with commits of their own on top of them are never updated.
+With *--rebase-merges* this includes the merged branches: amending a commit on one otherwise leaves its branch pointing at the old commits.
+
+If the rebase fails to start, for example because another rebase is in progress, the fixup commit is left on top of *HEAD*; squash it later with *git* *rebase* *-i* *--autosquash*, or drop it with *git* *reset* *HEAD{tilde}1*.
+
+== SEE ALSO
+
+*git-commit*(1), *git-rebase*(1), *git-rerere*(1)

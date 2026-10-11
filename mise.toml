@@ -1,0 +1,7 @@
+# https://mise.jdx.dev
+# Development tools; run `mise install`, then see `just --list`
+
+[tools]
+# The gem backend installs with the ruby already on PATH
+"gem:asciidoctor" = "latest"
+shellcheck = "latest"
