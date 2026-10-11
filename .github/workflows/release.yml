@@ -1,0 +1,66 @@
+name: Release
+
+# Pushing a vX.Y.Z tag builds the man page and publishes git-amend-X.Y.Z.tar.gz
+# to the GitHub release, with the matching CHANGELOG.md section as its notes.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Asciidoctor
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends asciidoctor
+
+      - name: Set version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Date the page by the tagged commit, not the build time
+      - name: Build man page
+        run: |
+          asciidoctor --backend manpage --failure-level WARN \
+            --attribute revdate="$(git log -1 --format=%cs)" \
+            --attribute mansource="git-amend $VERSION" \
+            man/git-amend.adoc
+
+      - name: Extract release notes
+        run: |
+          # The CHANGELOG.md section for this version, up to the next heading or link reference
+          awk -v version="$VERSION" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && (/^## / || /^\[/) { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error file=CHANGELOG.md::no CHANGELOG.md entry for $VERSION"
+            exit 1
+          fi
+
+      # Same layout as the source tree, with the built page in place of the .adoc
+      - name: Package
+        run: |
+          dir="git-amend-$VERSION"
+          mkdir -p "$dir/man"
+          cp -r bin completions CHANGELOG.md LICENSE.md README.md "$dir/"
+          cp man/git-amend.1 "$dir/man/"
+          # Fixed metadata so rebuilding a tag gives the same tarball and checksum
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+            --mtime="$(git log -1 --format=%cI)" \
+            -czf "$dir.tar.gz" "$dir"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "git-amend-$VERSION.tar.gz" \
+            --verify-tag --title "git-amend $VERSION" --notes-file notes.md
